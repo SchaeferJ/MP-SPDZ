@@ -24,8 +24,6 @@ void Program::compute_constants()
               p[i].get_mem(RegType(reg_type)));
         }
       writes_persistance |= p[i].opcode == WRITEFILESHARE;
-      writes_weights |= p[i].opcode == WRITEWEIGHTSHARE;
-      writes_perf |= p[i].opcode == WRITEPERFSHARE;
     }
 }
 

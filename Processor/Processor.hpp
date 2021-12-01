@@ -70,7 +70,7 @@ Processor<sint, sgf2n>::Processor(int thread_num,Player& P,
         const Program& program)
 : ArithmeticProcessor(machine.opts, thread_num),DataF(machine, &Procp, &Proc2),P(P),
   MC2(MC2),MCp(MCp),machine(machine),
-  share_thread(machine.get_N(), machine.opts, P, machine.get_bit_mac_key(), DataF.usage),
+  share_thread(DataF.DataFb, P, machine.get_bit_mac_key()),
   Procb(machine.bit_memories),
   Proc2(*this,MC2,DataF.DataF2,P),Procp(*this,MCp,DataF.DataFp,P),
   privateOutput2(Proc2),privateOutputp(Procp),
@@ -94,21 +94,8 @@ Processor<sint, sgf2n>::Processor(int thread_num,Player& P,
   secure_prng.ReSeed();
   shared_prng.SeedGlobally(P, false);
 
-  // only output on party 0 if not interactive
-  bool always_stdout = machine.opts.cmd_private_output_file == ".";
-  bool output = P.my_num() == 0 or machine.opts.interactive or always_stdout;
-  out.activate(output);
-  Procb.out.activate(output);
-
-  if (not always_stdout)
-    setup_redirection(P.my_num(), thread_num, opts);
-
-  if (stdout_redirect_file.is_open())
-  {
-    out.redirect_to_file(stdout_redirect_file);
-    Procb.out.redirect_to_file(stdout_redirect_file);
-  }
-
+  setup_redirection(P.my_num(), thread_num, opts, out);
+  Procb.out = out;
 }
 
 
@@ -266,8 +253,9 @@ void Processor<sint, sgf2n>::split(const Instruction& instruction)
 // If message_type is > 0, send message_type in bytes 0 - 3, to allow an external client to
 //  determine the data structure being sent in a message.
 template<class sint, class sgf2n>
-void Processor<sint, sgf2n>::write_socket(const RegType reg_type, int socket_id,
-    int message_type, const vector<int>& registers, int size)
+void Processor<sint, sgf2n>::write_socket(const RegType reg_type,
+    bool send_macs, int socket_id, int message_type,
+    const vector<int>& registers, int size)
 {
   int m = registers.size();
   socket_stream.reset_write_head();
@@ -283,9 +271,12 @@ void Processor<sint, sgf2n>::write_socket(const RegType reg_type, int socket_id,
         {
           if (reg_type == SINT)
             {
-              // Send vector of secret shares
-              get_Sp_ref(registers[i] + j).pack(socket_stream,
-                  sint::get_rec_factor(P.my_num(), P.num_players()));
+              // Send vector of secret shares and optionally macs
+              if (send_macs)
+                get_Sp_ref(registers[i] + j).pack(socket_stream);
+              else
+                get_Sp_ref(registers[i] + j).pack(socket_stream,
+                    sint::get_rec_factor(P.my_num(), P.num_players()));
             }
           else if (reg_type == CINT)
             {
@@ -398,36 +389,6 @@ void Processor<sint, sgf2n>::read_shares_from_file(int start_file_posn, int end_
   }
 }
 
-// Read weight data from a file starting at file_pos until registers filled.
-// file_pos_register is written with new file position (-1 is eof).
-// Tolerent to no file if no shares yet persisted.
-template<class sint, class sgf2n>
-void Processor<sint, sgf2n>::read_weights_from_file(int start_file_posn, int end_file_pos_register, const vector<int>& data_registers) {
-  string filename;
-  filename = "Persistence/Weights-P" + to_string(P.my_num()) + ".data";
-
-  unsigned int size = data_registers.size();
-
-  vector< sint > outbuf(size);
-
-  int end_file_posn = start_file_posn;
-
-  try {
-    binary_file_io.read_from_file(filename, outbuf, start_file_posn, end_file_posn);
-
-    for (unsigned int i = 0; i < size; i++)
-    {
-      get_Sp_ref(data_registers[i]) = outbuf[i];
-    }
-
-    write_Ci(end_file_pos_register, (long)end_file_posn);    
-  }
-  catch (file_missing& e) {
-    cerr << "Got file missing error, will return -2. " << e.what() << endl;
-    write_Ci(end_file_pos_register, (long)-2);
-  }
-}
-
 // Append share data in data_registers to end of file. Expects Persistence directory to exist.
 template<class sint, class sgf2n>
 void Processor<sint, sgf2n>::write_shares_to_file(const vector<int>& data_registers) {
@@ -443,39 +404,6 @@ void Processor<sint, sgf2n>::write_shares_to_file(const vector<int>& data_regist
   }
 
   binary_file_io.write_to_file(filename, inpbuf);
-}
-
-// Append share data in data_registers to end of file. Expects Persistence directory to exist.
-template<class sint, class sgf2n>
-void Processor<sint, sgf2n>::write_weights_to_file(const vector<int>& data_registers) {
-  string weightname = binary_file_io.weightname(P.my_num());
-
-  unsigned int size = data_registers.size();
-
-  vector< sint > inpbuf (size);
-
-  for (unsigned int i = 0; i < size; i++)
-  {
-    inpbuf[i] = get_Sp_ref(data_registers[i]);
-  }
-
-  binary_file_io.write_to_file(weightname, inpbuf);
-}
-
-template<class sint, class sgf2n>
-void Processor<sint, sgf2n>::write_perf_to_file(const vector<int>& data_registers) {
-  string perfname = binary_file_io.perfname(P.my_num());
-
-  unsigned int size = data_registers.size();
-
-  vector< sint > inpbuf (size);
-
-  for (unsigned int i = 0; i < size; i++)
-  {
-    inpbuf[i] = get_Sp_ref(data_registers[i]);
-  }
-
-  binary_file_io.write_to_file(perfname, inpbuf);
 }
 
 template <class T>
@@ -585,7 +513,7 @@ void SubProcessor<T>::dotprods(const vector<int>& reg, int size)
 
 template<class T>
 void SubProcessor<T>::matmuls(const vector<T>& source,
-        const Instruction& instruction, int a, int b)
+        const Instruction& instruction, size_t a, size_t b)
 {
     auto& dim = instruction.get_start();
     auto A = source.begin() + a;
@@ -612,7 +540,7 @@ void SubProcessor<T>::matmuls(const vector<T>& source,
 
 template<class T>
 void SubProcessor<T>::matmulsm(const CheckVector<T>& source,
-        const Instruction& instruction, int a, int b)
+        const Instruction& instruction, size_t a, size_t b)
 {
     auto& dim = instruction.get_start();
     auto C = S.begin() + (instruction.get_r(0));

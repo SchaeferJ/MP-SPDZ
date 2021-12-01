@@ -272,8 +272,6 @@ void BaseInstruction::parse_operands(istream& s, int pos, int file_pos)
         break;
       // open instructions + read/write instructions with variable length args
       case WRITEFILESHARE:
-      case WRITEWEIGHTSHARE:
-      case WRITEPERFSHARE:
       case OPEN:
       case GOPEN:
       case MULS:
@@ -317,13 +315,6 @@ void BaseInstruction::parse_operands(istream& s, int pos, int file_pos)
         r[1] = get_int(s);
         get_vector(num_var_args, start, s);
         break;
-      
-      case READWEIGHTSHARE:
-        num_var_args = get_int(s) - 2;
-        r[0] = get_int(s);
-        r[1] = get_int(s);
-        get_vector(num_var_args, start, s);
-        break;
 
       // read from external client, input is : opcode num_args, client_id, var1, var2 ...
       case READSOCKETC:
@@ -337,6 +328,7 @@ void BaseInstruction::parse_operands(istream& s, int pos, int file_pos)
 
       // write to external client, input is : opcode num_args, client_id, message_type, var1, var2 ...
       case WRITESOCKETC:
+      case WRITESOCKETS:
       case WRITESOCKETSHARE:
       case WRITESOCKETINT:
         num_var_args = get_int(s) - 3;
@@ -345,8 +337,6 @@ void BaseInstruction::parse_operands(istream& s, int pos, int file_pos)
         n = get_int(s);
         get_vector(num_var_args, start, s);
         break;
-      case WRITESOCKETS:
-        throw runtime_error("sending MACs to client not supported any more");
       case READCLIENTPUBLICKEY:
       case INITSECURESOCKET:
       case RESPSECURESOCKET:
@@ -815,22 +805,6 @@ bool BaseInstruction::is_direct_memory_access() const
 }
 
 
-inline
-ostream& operator<<(ostream& s,const Instruction& instr)
-{
-  s << instr.opcode << " : ";
-  for (int i=0; i<3; i++)
-    { s << instr.r[i] << " "; }
-  s << " : " << instr.n;
-  if (instr.start.size()!=0)
-    { s << " : " << instr.start.size() << " : ";
-      for (unsigned int i=0; i<instr.start.size(); i++)
-	{ s << instr.start[i] << " "; }
-    }
-  return s;
-} 
-
-
 template<class sint, class sgf2n>
 inline void Instruction::execute(Processor<sint, sgf2n>& Proc) const
 {
@@ -1079,31 +1053,19 @@ inline void Instruction::execute(Processor<sint, sgf2n>& Proc) const
            }
         break;
       case PRINTREGPLAIN:
-           {
-             Proc.out << Proc.read_Cp(r[0]) << flush;
-           }
-        break;
+        print(Proc.out, &Proc.read_Cp(r[0]));
+        return;
       case CONDPRINTPLAIN:
         if (not Proc.read_Cp(r[0]).is_zero())
           {
-            auto v = Proc.read_Cp(r[1]);
-            auto p = Proc.read_Cp(r[2]);
-            if (p.is_zero())
-              Proc.out << v << flush;
-            else
-              Proc.out << bigint::get_float(v, p, {}, {}) << flush;
+            print(Proc.out, &Proc.read_Cp(r[1]), &Proc.read_Cp(r[2]));
           }
-        break;
+        return;
       case PRINTFLOATPLAIN:
-          {
-            auto nan = Proc.read_Cp(start[4]);
-            typename sint::clear v = Proc.read_Cp(start[0]);
-            typename sint::clear p = Proc.read_Cp(start[1]);
-            typename sint::clear z = Proc.read_Cp(start[2]);
-            typename sint::clear s = Proc.read_Cp(start[3]);
-            bigint::output_float(Proc.out, bigint::get_float(v, p, z, s), nan);
-          }
-      break;
+        print(Proc.out, &Proc.read_Cp(start[0]), &Proc.read_Cp(start[1]),
+            &Proc.read_Cp(start[2]), &Proc.read_Cp(start[3]),
+            &Proc.read_Cp(start[4]));
+        return;
       case CONDPRINTSTR:
           if (not Proc.read_Cp(r[0]).is_zero())
             {
@@ -1133,9 +1095,7 @@ inline void Instruction::execute(Processor<sint, sgf2n>& Proc) const
         Proc.machine.stop(n);
         break;
       case RUN_TAPE:
-        Proc.DataF.skip(
-            Proc.machine.run_tapes(start, &Proc.DataF.DataFp,
-                &Proc.share_thread.DataF));
+        Proc.machine.run_tapes(start, Proc.DataF);
         break;
       case JOIN_TAPE:
         Proc.machine.join_tape(r[0]);
@@ -1195,36 +1155,28 @@ inline void Instruction::execute(Processor<sint, sgf2n>& Proc) const
         Proc.read_socket_private(Proc.read_Ci(r[0]), start, n, true);
         break;
       case WRITESOCKETINT:
-        Proc.write_socket(INT, Proc.read_Ci(r[0]), r[1], start, n);
+        Proc.write_socket(INT, false, Proc.read_Ci(r[0]), r[1], start, n);
         break;
       case WRITESOCKETC:
-        Proc.write_socket(CINT, Proc.read_Ci(r[0]), r[1], start, n);
+        Proc.write_socket(CINT, false, Proc.read_Ci(r[0]), r[1], start, n);
+        break;
+      case WRITESOCKETS:
+        // Send shares + MACs
+        Proc.write_socket(SINT, true, Proc.read_Ci(r[0]), r[1], start, n);
         break;
       case WRITESOCKETSHARE:
         // Send only shares, no MACs
         // N.B. doesn't make sense to have a corresponding read instruction for this
-        Proc.write_socket(SINT, Proc.read_Ci(r[0]), r[1], start, n);
+        Proc.write_socket(SINT, false, Proc.read_Ci(r[0]), r[1], start, n);
         break;
       case WRITEFILESHARE:
         // Write shares to file system
         Proc.write_shares_to_file(start);
         break;
-      case WRITEWEIGHTSHARE:
-        // Write shares to file system
-        Proc.write_weights_to_file(start);
-        break;
-      case WRITEPERFSHARE:
-        // Write shares to file system
-        Proc.write_perf_to_file(start);
-        break;
       case READFILESHARE:
         // Read shares from file system
         Proc.read_shares_from_file(Proc.read_Ci(r[0]), r[1], start);
-        break;
-      case READWEIGHTSHARE:
-        // Read shares from file system
-        Proc.read_weights_from_file(Proc.read_Ci(r[0]), r[1], start);
-        break; 
+        break;        
       case PUBINPUT:
         Proc.get_Cp_ref(r[0]) = Proc.template
             get_input<IntInput<typename sint::clear>>(
@@ -1319,6 +1271,10 @@ void Program::execute(Processor<sint, sgf2n>& Proc) const
       Proc.stats[p[Proc.PC].get_opcode()]++;
 #endif
 
+#ifdef OUTPUT_INSTRUCTIONS
+      cerr << instruction << endl;
+#endif
+
       Proc.PC++;
 
       switch(instruction.get_opcode())
@@ -1342,6 +1298,31 @@ void Program::execute(Processor<sint, sgf2n>& Proc) const
           instruction.execute(Proc);
         }
     }
+}
+
+template<class T>
+void Instruction::print(SwitchableOutput& out, T* v, T* p, T* s, T* z, T* nan) const
+{
+  if (size > 1)
+    out << "[";
+  for (int i = 0; i < size; i++)
+    {
+      if (p == 0)
+        out << v[i];
+      else if (s == 0)
+        out << bigint::get_float(v[i], p[i], {}, {});
+      else
+        {
+          assert(z != 0);
+          assert(nan != 0);
+          bigint::output_float(out, bigint::get_float(v[i], p[i], s[i], z[i]),
+              nan[i]);
+        }
+      if (i < size - 1)
+        out << ", ";
+    }
+  if (size > 1)
+    out << "]";
 }
 
 #endif

@@ -13,20 +13,6 @@ inline string Binary_File_IO::filename(int my_number)
   return dir + "/Transactions-P" + to_string(my_number) + ".data";
 }
 
-inline string Binary_File_IO::weightname(int my_number)
-{
-  string dir = "Persistence";
-  mkdir_p(dir.c_str());
-  return dir + "/Weights-P" + to_string(my_number) + ".data";
-}
-
-inline string Binary_File_IO::perfname(int my_number)
-{
-  string dir = "Persistence";
-  mkdir_p(dir.c_str());
-  return dir + "/Performance-P" + to_string(my_number) + ".data";
-}
-
 template<class T> 
 void Binary_File_IO::write_to_file(const string filename, const vector< T >& buffer)
 {

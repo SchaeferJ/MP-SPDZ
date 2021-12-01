@@ -1011,8 +1011,9 @@ class cint(_clear, _int):
             return regint(self) < regint(other)
         else:
             diff = self - other
+            diff += (1 << (bit_length - 1))
             shifted = diff >> (bit_length - 1)
-            res = regint(shifted & 1)
+            res = 1 - regint(shifted & 1)
             return res
 
     def __lt__(self, other):
@@ -1161,7 +1162,7 @@ class cint(_clear, _int):
         cond_print_str(self, string)
 
     def output_if(self, cond):
-        cond_print_plain(self.conv(cond), self, cint(0))
+        cond_print_plain(self.conv(cond), self, cint(0, size=self.size))
 
 
 class cgf2n(_clear, _gf2n):
@@ -1922,14 +1923,7 @@ class _secret(_register, _secret_structure):
             r = self.get_dabit()
             movs(self, r[0].bit_xor((r[1] ^ val).reveal().to_regint_by_bit()))
         elif isinstance(val, sbitvec):
-            assert(sum(x.n for x in val.v) == self.size)
-            for val_part, base in zip(val, range(0, self.size, 64)):
-                left = min(64, self.size - base)
-                r = self.get_dabit(size=left)
-                v = regint(size=left)
-                bitdecint_class(regint((r[1] ^ val_part).reveal()), *v)
-                part = r[0].bit_xor(v)
-                vmovs(left, self.get_vector(base, left), part)
+            movs(self, sint.bit_compose(val))
         else:
             self.load_clear(self.clear_type(val))
 
@@ -1939,6 +1933,8 @@ class _secret(_register, _secret_structure):
 
         :param bits: iterable of any type convertible to sint """
         from Compiler.GC.types import sbits, sbitintvec
+        if isinstance(bits, sbits):
+            bits = bits.bit_decompose()
         bits = list(bits)
         if (program.use_edabit() or program.use_split()) and isinstance(bits[0], sbits):
             if program.use_edabit():
@@ -2112,6 +2108,11 @@ class sint(_secret, _int):
         thereof or sbits/sbitvec/sfix)
     :param size: vector size (int), defaults to 1 or size of list
 
+    When converting :py:class:`~Compiler.GC.types.sbits`, the result is a
+    vector of bits, and when converting
+    :py:class:`~Compiler.GC.types.sbitvec`, the result is a vector of values
+    with bit length equal the length of the input.
+
     """
     __slots__ = []
     instruction_type = 'modp'
@@ -2278,6 +2279,17 @@ class sint(_secret, _int):
         else:
             return res
 
+    @vectorized_classmethod
+    def write_to_socket(cls, client_id, values,
+                        message_type=ClientMessageType.NoType):
+        """ Send a list of shares and MAC shares to a client socket.
+
+        :param client_id: regint
+        :param values: list of sint
+
+        """
+        writesockets(client_id, message_type, values[0].size, *values)
+
     @vectorize
     def write_share_to_socket(self, client_id, message_type=ClientMessageType.NoType):
         """ Send only share to socket """
@@ -2306,20 +2318,6 @@ class sint(_secret, _int):
         stop = regint()
         readsharesfromfile(regint.conv(start), stop, *shares)
         return stop, shares
-    
-    @classmethod
-    def read_weights_from_file(cls, start, n_items):
-        """ Read weights from ``Persistence/Weights-P<playerno>.data``.
-
-        :param start: starting position in number of shares from beginning (int/regint/cint)
-        :param n_items: number of items (int)
-        :returns: destination for final position, -1 for eof reached, or -2 for file not found (regint)
-        :returns: list of shares
-        """
-        shares = [cls(size=1) for i in range(n_items)]
-        stop = regint()
-        readweightsfromfile(regint.conv(start), stop, *shares)
-        return stop, shares
 
     @staticmethod
     def write_to_file(shares):
@@ -2332,30 +2330,6 @@ class sint(_secret, _int):
             assert isinstance(share, sint)
             assert share.size == 1
         writesharestofile(*shares)
-    
-    @staticmethod   
-    def write_weights_to_file(shares):
-        """ Write shares to ``Persistence/Weights-P<playerno>.data``
-        (appending at the end).
-
-        :param: shares (list or iterable of sint)
-        """
-        for share in shares:
-            assert isinstance(share, sint)
-            assert share.size == 1
-        writeweightstofile(*shares)
-
-    @staticmethod   
-    def write_perf_to_file(shares):
-        """ Write shares to ``Persistence/Performance-P<playerno>.data``
-        (appending at the end).
-
-        :param: shares (list or iterable of sint)
-        """
-        for share in shares:
-            assert isinstance(share, sint)
-            assert share.size == 1
-        writeperftofile(*shares)
 
     @vectorized_classmethod
     def load_mem(cls, address, mem_type=None):
@@ -2377,6 +2351,7 @@ class sint(_secret, _int):
 
     @vectorize_init
     def __init__(self, val=None, size=None):
+        from .GC.types import sbitvec
         if isinstance(val, personal):
             size = val._v.size
             super(sint, self).__init__('s', size=size)
@@ -2384,6 +2359,8 @@ class sint(_secret, _int):
         elif isinstance(val, _fix):
             super(sint, self).__init__('s', size=val.v.size)
             self.load_other(val.v.round(val.k, val.f))
+        elif isinstance(val, sbitvec):
+            super(sint, self).__init__('s', val=val, size=val[0].n)
         else:
             super(sint, self).__init__('s', val=val, size=size)
 
@@ -3785,13 +3762,14 @@ class cfix(_number, _structure):
         other = parse_type(other, self.k, self.f)
         return other / self
 
+    @vectorize
     def print_plain(self):
         """ Clear fixed-point output. """
         print_float_plain(cint.conv(self.v), cint(-self.f), \
                           cint(0), cint(0), cint(0))
 
     def output_if(self, cond):
-        cond_print_plain(cint.conv(cond), self.v, cint(-self.f))
+        cond_print_plain(cint.conv(cond), self.v, cint(-self.f, size=self.size))
 
     @vectorize
     def binary_output(self, player=None):
@@ -3933,21 +3911,6 @@ class _single(_number, _secret_structure):
         return stop, [cls._new(x) for x in shares]
 
     @classmethod
-    def read_weights_from_file(cls, *args, **kwargs):
-        """ Read shares from ``Persistence/Weights-P<playerno>.data``.
-        Precision must be the same as when storing.
-
-        :param start: starting position in number of shares from beginning
-            (int/regint/cint)
-        :param n_items: number of items (int)
-        :returns: destination for final position, -1 for eof reached,
-             or -2 for file not found (regint)
-        :returns: list of shares
-        """
-        stop, shares = cls.int_type.read_weights_from_file(*args, **kwargs)
-        return stop, [cls._new(x) for x in shares]
-
-    @classmethod
     def write_to_file(cls, shares):
         """ Write shares of integer representation to
         ``Persistence/Transactions-P<playerno>.data`` (appending at the end).
@@ -3955,24 +3918,6 @@ class _single(_number, _secret_structure):
         :param: shares (list or iterable of sfix)
         """
         cls.int_type.write_to_file([x.v for x in shares])
-
-    @classmethod
-    def write_weights_to_file(cls, shares):
-        """ Write shares of integer representation to
-        ``Persistence/Weights-P<playerno>.data`` (appending at the end).
-
-        :param: shares (list or iterable of sfix)
-        """
-        cls.int_type.write_weights_to_file([x.v for x in shares])
-
-    @classmethod
-    def write_perf_to_file(cls, shares):
-        """ Write shares of integer representation to
-        ``Persistence/Performance-P<playerno>.data`` (appending at the end).
-
-        :param: shares (list or iterable of sfix)
-        """
-        cls.int_type.write_perf_to_file([x.v for x in shares])
 
     def store_in_mem(self, address):
         """ Store in memory by public address. """
@@ -4099,7 +4044,8 @@ class _fix(_single):
             print('Nearest rounding instead of proabilistic '
                   'for fixed-point computation')
             cls.round_nearest = True
-        if adapt_ring and program.options.ring:
+        if adapt_ring and program.options.ring \
+           and 'fix_ring' not in program.args:
             need = 2 ** int(math.ceil(math.log(2 * cls.k, 2)))
             if need != int(program.options.ring):
                 print('Changing computation modulus to 2^%d' % need)
@@ -4165,6 +4111,8 @@ class _fix(_single):
         elif isinstance(_v, (MemValue, MemFix)):
             #this is a memvalue object
             self.v = type(self)(_v.read()).v
+        elif isinstance(_v, (list, tuple)):
+            self.v = self.int_type(list(self.conv(x).v for x in _v))
         else:
             raise CompilerError('cannot convert %s to sfix' % _v)
         if not isinstance(self.v, self.int_type):
@@ -4321,7 +4269,7 @@ class sfix(_fix):
         return cls._new(cls.int_type.get_raw_input_from(player))
 
     @vectorized_classmethod
-    def get_random(cls, lower, upper):
+    def get_random(cls, lower, upper, symmetric=True):
         """ Uniform secret random number around centre of bounds.
         Actual range can be smaller but never larger.
 
@@ -4332,8 +4280,19 @@ class sfix(_fix):
         log_range = int(math.log(upper - lower, 2))
         n_bits = log_range + cls.f
         average = lower + 0.5 * (upper - lower)
-        lower = average - 0.5 * 2 ** log_range
-        return cls._new(cls.int_type.get_random_int(n_bits)) + lower
+        real_range = (2 ** (n_bits) - 1) / 2 ** cls.f
+        lower = average - 0.5 * real_range
+        real_lower = round(lower * 2 ** cls.f) / 2 ** cls.f
+        r = cls._new(cls.int_type.get_random_int(n_bits)) + lower
+        if symmetric:
+            lowest = math.floor(lower * 2 ** cls.f) / 2 ** cls.f
+            print('randomness range [%f,%f], fringes half the probability' % \
+                  (lowest, lowest + 2 ** log_range))
+            return cls.int_type.get_random_bit().if_else(r, -r + 2 * average)
+        else:
+            print('randomness range [%f,%f], %d bits' % \
+                  (real_lower, real_lower + real_range, n_bits))
+            return r
 
     @classmethod
     def direct_matrix_mul(cls, A, B, n, m, l, reduce=True, indices=None):
@@ -5056,6 +5015,7 @@ class cfloat(object):
     """ Helper class for printing revealed sfloats. """
     __slots__ = ['v', 'p', 'z', 's', 'nan']
 
+    @vectorize_init
     def __init__(self, v, p=None, z=None, s=None, nan=0):
         """ Parameters as with :py:class:`sfloat` but public. """
         if s is None:
@@ -5064,6 +5024,11 @@ class cfloat(object):
             parts = [cint.conv(x) for x in (v, p, z, s, nan)]
         self.v, self.p, self.z, self.s, self.nan = parts
 
+    @property
+    def size(self):
+        return self.v.size
+
+    @vectorize
     def print_float_plain(self):
         """ Output. """
         print_float_plain(self.v, self.p, self.z, self.s, self.nan)
@@ -5412,36 +5377,11 @@ class Array(_vectorizable):
         self.assign(shares)
         return stop
 
-    def read_weights_from_file(self, start):
-        """ Read content from ``Persistence/Transactions-P<playerno>.data``.
-        Precision must be the same as when storing if applicable.
-
-        :param start: starting position in number of shares from beginning
-            (int/regint/cint)
-        :returns: destination for final position, -1 for eof reached,
-             or -2 for file not found (regint)
-        """
-        stop, shares = self.value_type.read_weights_from_file(start, len(self))
-        self.assign(shares)
-        return stop
-
     def write_to_file(self):
         """ Write shares of integer representation to
         ``Persistence/Transactions-P<playerno>.data`` (appending at the end).
         """
         self.value_type.write_to_file(list(self))
-
-    def write_weights_to_file(self):
-        """ Write shares of integer representation to
-        ``Persistence/Weights-P<playerno>.data`` (appending at the end).
-        """
-        self.value_type.write_weights_to_file(list(self))
-    
-    def write_perf_to_file(self):
-        """ Write shares of integer representation to
-        ``Persistence/Performance-P<playerno>.data`` (appending at the end).
-        """
-        self.value_type.write_perf_to_file(list(self))
 
     def __add__(self, other):
         """ Vector addition.
@@ -5485,15 +5425,7 @@ class Array(_vectorizable):
 
     def shuffle(self):
         """ Insecure shuffle in place. """
-        if self.value_type == regint:
-            self.assign(self.get_vector().shuffle())
-        else:
-            @library.for_range(len(self))
-            def _(i):
-                j = regint.get_random(64) % (len(self) - i)
-                tmp = self[i]
-                self[i] = self[i + j]
-                self[i + j] = tmp
+        self.assign_vector(self.get(regint.inc(len(self)).shuffle()))
 
     def reveal(self):
         """ Reveal the whole array.
@@ -5506,6 +5438,13 @@ class Array(_vectorizable):
         return list(self.get_vector().reveal())
 
     reveal_nested = reveal_list
+
+    def print_reveal_nested(self, end='\n'):
+        """ Reveal and print as list.
+
+        :param end: string to print after (default: line break)
+        """
+        library.print_str('%s' + end, self.get_vector().reveal())
 
     def reveal_to_binary_output(self, player=None):
         """ Reveal to binary output if supported by type.
@@ -5545,6 +5484,8 @@ sgf2n.dynamic_array = Array
 class SubMultiArray(_vectorizable):
     """ Multidimensional array functionality.  Don't construct this
     directly, use :py:class:`MultiArray` instead. """
+    check_indices = True
+
     def __init__(self, sizes, value_type, address, index, debug=None):
         self.sizes = tuple(sizes)
         self.value_type = _get_type(value_type)
@@ -5554,7 +5495,6 @@ class SubMultiArray(_vectorizable):
             self.address = None
         self.sub_cache = {}
         self.debug = debug
-        self.check_indices = True
         if debug:
             library.print_ln_if(self.address + reduce(operator.mul, self.sizes) * self.value_type.n_elements() > program.allocated_mem[self.value_type.reg_type], 'AOF%d:' % len(self.sizes) + self.debug)
 
@@ -5563,8 +5503,6 @@ class SubMultiArray(_vectorizable):
 
         :param index: public (regint/cint/int)
         :return: :py:class:`Array` if one-dimensional, :py:class:`SubMultiArray` otherwise"""
-        if util.is_constant(index) and index >= self.sizes[0]:
-            raise StopIteration
         if isinstance(index, slice) and index == slice(None):
             return self.get_vector()
         key = program.curr_block, str(index)
@@ -5586,7 +5524,9 @@ class SubMultiArray(_vectorizable):
                 self.sub_cache[key] = \
                         SubMultiArray(self.sizes[1:], self.value_type, \
                                       self.address, index, debug=self.debug)
-        return self.sub_cache[key]
+        res = self.sub_cache[key]
+        res.check_indices = self.check_indices
+        return res
 
     def __setitem__(self, index, other):
         """ Part assignment.
@@ -5600,6 +5540,9 @@ class SubMultiArray(_vectorizable):
     def __len__(self):
         """ Size of top dimension. """
         return self.sizes[0]
+
+    def __iter__(self):
+        return (self[i] for i in range(len(self)))
 
     def assign_all(self, value):
         """ Assign the same value to all entries.
@@ -5760,22 +5703,6 @@ class SubMultiArray(_vectorizable):
         def _(i):
             self[i].write_to_file()
 
-    def write_weights_to_file(self):
-        """ Write shares of integer representation to
-        ``Persistence/Weights-P<playerno>.data`` (appending at the end).
-        """
-        @library.for_range(len(self))
-        def _(i):
-            self[i].write_weights_to_file()
-
-    def write_perf_to_file(self):
-        """ Write shares of integer representation to
-        ``Persistence/Performance-P<playerno>.data`` (appending at the end).
-        """
-        @library.for_range(len(self))
-        def _(i):
-            self[i].write_perf_to_file()
-
     def read_from_file(self, start):
         """ Read content from ``Persistence/Transactions-P<playerno>.data``.
         Precision must be the same as when storing if applicable.
@@ -5789,21 +5716,6 @@ class SubMultiArray(_vectorizable):
         @library.for_range(len(self))
         def _(i):
             start.write(self[i].read_from_file(start))
-        return start
-
-    def read_weights_from_file(self, start):
-        """ Read content from ``Persistence/Weights-P<playerno>.data``.
-        Precision must be the same as when storing if applicable.
-
-        :param start: starting position in number of shares from beginning
-            (int/regint/cint)
-        :returns: destination for final position, -1 for eof reached,
-             or -2 for file not found (regint)
-        """
-        start = MemValue(start)
-        @library.for_range(len(self))
-        def _(i):
-            start.write(self[i].read_weights_from_file(start))
         return start
 
     def schur(self, other):
@@ -6004,6 +5916,38 @@ class SubMultiArray(_vectorizable):
             self.address, other.address, None, 1, other.sizes[1],
             reduce=reduce, indices=indices)
 
+    def trans_mul_to(self, other, res, n_threads=None):
+        """
+        Matrix multiplication with the transpose of :py:obj:`self`
+        in the virtual machine.
+
+        :param self: :py:class:`Matrix` / 2-dimensional :py:class:`MultiArray`
+        :param other: :py:class:`Matrix` / 2-dimensional :py:class:`MultiArray`
+        :param res: matrix of matching dimension to store result
+        :param n_threads: number of threads (default: single thread)
+        """
+        @library.for_range_multithread(n_threads, 1, self.sizes[1])
+        def _(i):
+            indices = [regint(i), regint.inc(self.sizes[0])]
+            indices += [regint.inc(i) for i in other.sizes]
+            res[i] = self.direct_trans_mul(other, indices=indices)
+
+    def mul_trans_to(self, other, res, n_threads=None):
+        """
+        Matrix multiplication with the transpose of :py:obj:`other`
+        in the virtual machine.
+
+        :param self: :py:class:`Matrix` / 2-dimensional :py:class:`MultiArray`
+        :param other: :py:class:`Matrix` / 2-dimensional :py:class:`MultiArray`
+        :param res: matrix of matching dimension to store result
+        :param n_threads: number of threads (default: single thread)
+        """
+        @library.for_range_multithread(n_threads, 1, self.sizes[0])
+        def _(i):
+            indices = [regint(i), regint.inc(self.sizes[1])]
+            indices += [regint.inc(i) for i in reversed(other.sizes)]
+            res[i] = self.direct_mul_trans(other, indices=indices)
+
     def direct_mul_to_matrix(self, other):
         """ Matrix multiplication in the virtual machine.
 
@@ -6119,6 +6063,13 @@ class SubMultiArray(_vectorizable):
         assert self.sizes[0] == self.sizes[1]
         return sum(self[i][i] for i in range(self.sizes[0]))
 
+    def diag(self):
+        """ Matrix diagonal. """
+        assert len(self.sizes) == 2
+        assert self.sizes[0] == self.sizes[1]
+        n = self.sizes[0]
+        return self.array.get(regint.inc(n, 0, n + 1))
+
     def reveal_list(self):
         """ Reveal as list. """
         return list(self.get_vector().reveal())
@@ -6133,6 +6084,21 @@ class SubMultiArray(_vectorizable):
             else:
                 return [f(sizes[1:]) for i in range(sizes[0])]
         return f(self.sizes)
+
+    def print_reveal_nested(self, end='\n'):
+        """ Reveal and print as nested list.
+
+        :param end: string to print after (default: line break)
+        """
+        if self.total_size() < program.options.budget:
+            library.print_str('%s' + end, self.reveal_nested())
+        else:
+            library.print_str('[')
+            @library.for_range(len(self) - 1)
+            def _(i):
+                self[i].print_reveal_nested(end=', ')
+            self[len(self) - 1].print_reveal_nested(end='')
+            library.print_str(']' + end)
 
     def reveal_to_binary_output(self, player=None):
         """ Reveal to binary output if supported by type.
@@ -6169,6 +6135,10 @@ class MultiArray(SubMultiArray):
       a[2][:] = a[0][:] * a[1][:]
 
     """
+    @staticmethod
+    def disable_index_checks():
+        SubMultiArray.check_indices = False
+
     def __init__(self, sizes, value_type, debug=None, address=None, alloc=True):
         if isinstance(address, Array):
             self.array = address

@@ -31,11 +31,9 @@ class Program
   public:
 
   bool writes_persistance;
-  bool writes_weights;
-  bool writes_perf;
 
   Program(int nplayers) : offline_data_used(nplayers),
-      unknown_usage(false), writes_persistance(false), writes_weights(false), writes_perf(false)
+      unknown_usage(false), writes_persistance(false)
     { compute_constants(); }
 
   // Read in a program
