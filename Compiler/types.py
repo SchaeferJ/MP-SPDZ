@@ -2319,6 +2319,20 @@ class sint(_secret, _int):
         readsharesfromfile(regint.conv(start), stop, *shares)
         return stop, shares
 
+    @classmethod
+    def read_weights_from_file(cls, start, n_items):
+        """ Read weights from ``Persistence/Weights-P<playerno>.data``.
+
+        :param start: starting position in number of shares from beginning (int/regint/cint)
+        :param n_items: number of items (int)
+        :returns: destination for final position, -1 for eof reached, or -2 for file not found (regint)
+        :returns: list of shares
+        """
+        shares = [cls(size=1) for i in range(n_items)]
+        stop = regint()
+        readweightsfromfile(regint.conv(start), stop, *shares)
+        return stop, shares
+
     @staticmethod
     def write_to_file(shares):
         """ Write shares to ``Persistence/Transactions-P<playerno>.data``
@@ -3935,6 +3949,21 @@ class _single(_number, _secret_structure):
         return stop, [cls._new(x) for x in shares]
 
     @classmethod
+    def read_weights_from_file(cls, *args, **kwargs):
+        """ Read shares from ``Persistence/Weights-P<playerno>.data``.
+        Precision must be the same as when storing.
+
+        :param start: starting position in number of shares from beginning
+            (int/regint/cint)
+        :param n_items: number of items (int)
+        :returns: destination for final position, -1 for eof reached,
+             or -2 for file not found (regint)
+        :returns: list of shares
+        """
+        stop, shares = cls.int_type.read_weights_from_file(*args, **kwargs)
+        return stop, [cls._new(x) for x in shares]
+
+    @classmethod
     def write_to_file(cls, shares):
         """ Write shares of integer representation to
         ``Persistence/Transactions-P<playerno>.data`` (appending at the end).
@@ -5420,6 +5449,19 @@ class Array(_vectorizable):
         self.assign(shares)
         return stop
 
+    def read_weights_from_file(self, start):
+        """ Read content from ``Persistence/Transactions-P<playerno>.data``.
+        Precision must be the same as when storing if applicable.
+
+        :param start: starting position in number of shares from beginning
+            (int/regint/cint)
+        :returns: destination for final position, -1 for eof reached,
+             or -2 for file not found (regint)
+        """
+        stop, shares = self.value_type.read_weights_from_file(start, len(self))
+        self.assign(shares)
+        return stop
+
     def write_to_file(self):
         """ Write shares of integer representation to
         ``Persistence/Transactions-P<playerno>.data`` (appending at the end).
@@ -5787,6 +5829,21 @@ class SubMultiArray(_vectorizable):
         @library.for_range(len(self))
         def _(i):
             start.write(self[i].read_from_file(start))
+        return start
+
+    def read_weights_from_file(self, start):
+        """ Read content from ``Persistence/Weights-P<playerno>.data``.
+        Precision must be the same as when storing if applicable.
+
+        :param start: starting position in number of shares from beginning
+            (int/regint/cint)
+        :returns: destination for final position, -1 for eof reached,
+             or -2 for file not found (regint)
+        """
+        start = MemValue(start)
+        @library.for_range(len(self))
+        def _(i):
+            start.write(self[i].read_weights_from_file(start))
         return start
 
     def schur(self, other):

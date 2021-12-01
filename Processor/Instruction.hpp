@@ -318,6 +318,14 @@ void BaseInstruction::parse_operands(istream& s, int pos, int file_pos)
         get_vector(num_var_args, start, s);
         break;
 
+      case READWEIGHTSHARE:
+        num_var_args = get_int(s) - 2;
+        r[0] = get_int(s);
+        r[1] = get_int(s);
+        get_vector(num_var_args, start, s);
+        break;
+
+
       // read from external client, input is : opcode num_args, client_id, var1, var2 ...
       case READSOCKETC:
       case READSOCKETS:
@@ -1187,6 +1195,10 @@ inline void Instruction::execute(Processor<sint, sgf2n>& Proc) const
         // Read shares from file system
         Proc.read_shares_from_file(Proc.read_Ci(r[0]), r[1], start);
         break;        
+      case READWEIGHTSHARE:
+        // Read shares from file system
+        Proc.read_weights_from_file(Proc.read_Ci(r[0]), r[1], start);
+        break; 
       case PUBINPUT:
         Proc.get_Cp_ref(r[0]) = Proc.template
             get_input<IntInput<typename sint::clear>>(

@@ -389,6 +389,36 @@ void Processor<sint, sgf2n>::read_shares_from_file(int start_file_posn, int end_
   }
 }
 
+// Read weight data from a file starting at file_pos until registers filled.
+// file_pos_register is written with new file position (-1 is eof).
+// Tolerent to no file if no shares yet persisted.
+template<class sint, class sgf2n>
+void Processor<sint, sgf2n>::read_weights_from_file(int start_file_posn, int end_file_pos_register, const vector<int>& data_registers) {
+  string filename;
+  filename = "Persistence/Weights-P" + to_string(P.my_num()) + ".data";
+
+  unsigned int size = data_registers.size();
+
+  vector< sint > outbuf(size);
+
+  int end_file_posn = start_file_posn;
+
+  try {
+    binary_file_io.read_from_file(filename, outbuf, start_file_posn, end_file_posn);
+
+    for (unsigned int i = 0; i < size; i++)
+    {
+      get_Sp_ref(data_registers[i]) = outbuf[i];
+    }
+
+    write_Ci(end_file_pos_register, (long)end_file_posn);    
+  }
+  catch (file_missing& e) {
+    cerr << "Got file missing error, will return -2. " << e.what() << endl;
+    write_Ci(end_file_pos_register, (long)-2);
+  }
+}
+
 // Append share data in data_registers to end of file. Expects Persistence directory to exist.
 template<class sint, class sgf2n>
 void Processor<sint, sgf2n>::write_shares_to_file(const vector<int>& data_registers) {
