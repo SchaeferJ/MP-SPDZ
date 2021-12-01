@@ -92,6 +92,9 @@ Machine<sint, sgf2n>::Machine(int my_number, Names& playerNames,
        exit(1);
      }
 
+  // Keep record of used offline data
+  pos.set_num_players(N.num_players());
+
   load_schedule(progname_str);
 
   // remove persistence if necessary
@@ -99,6 +102,10 @@ Machine<sint, sgf2n>::Machine(int my_number, Names& playerNames,
     {
       if (prog.writes_persistance)
         ofstream(Binary_File_IO::filename(my_number), ios::out);
+      if (prog.writes_weights)
+        ofstream(Binary_File_IO::weightname(my_number), ios::out);
+      if (prog.writes_perf)
+        ofstream(Binary_File_IO::perfname(my_number), ios::out);
     }
 
 #ifdef VERBOSE
@@ -158,16 +165,14 @@ void Machine<sint, sgf2n>::load_program(const string& threadname,
 
 template<class sint, class sgf2n>
 DataPositions Machine<sint, sgf2n>::run_tapes(const vector<int>& args,
-    Data_Files<sint, sgf2n>& DataF)
+    Preprocessing<sint>* prep, Preprocessing<typename sint::bit_type>* bit_prep)
 {
   assert(args.size() % 3 == 0);
   for (unsigned i = 0; i < args.size(); i += 3)
-    fill_buffers(args[i], args[i + 1], &DataF.DataFp, &DataF.DataFb);
+    fill_buffers(args[i], args[i + 1], prep, bit_prep);
   DataPositions res(N.num_players());
   for (unsigned i = 0; i < args.size(); i += 3)
-    res.increase(
-        run_tape(args[i], args[i + 1], args[i + 2], DataF.tellg() + res));
-  DataF.skip(res);
+    res.increase(run_tape(args[i], args[i + 1], args[i + 2]));
   return res;
 }
 
@@ -280,7 +285,7 @@ void Machine<sint, sgf2n>::fill_matmul(int thread_number, int tape_number,
 
 template<class sint, class sgf2n>
 DataPositions Machine<sint, sgf2n>::run_tape(int thread_number, int tape_number,
-    int arg, const DataPositions& pos)
+    int arg)
 {
   if (size_t(thread_number) >= tinfo.size())
     throw overflow("invalid thread number", thread_number, tinfo.size());
@@ -293,7 +298,7 @@ DataPositions Machine<sint, sgf2n>::run_tape(int thread_number, int tape_number,
   if (progs[tape_number].usage_unknown())
     {
 #ifndef INSECURE
-      if (not opts.live_prep and thread_number != 0)
+      if (not opts.live_prep)
         {
           cerr << "Internally called tape " << tape_number <<
               " has unknown offline data usage" << endl;
@@ -327,7 +332,7 @@ void Machine<sint, sgf2n>::run()
   timer[0].start();
 
   // run main tape
-  run_tape(0, 0, 0, N.num_players());
+  pos.increase(run_tape(0, 0, 0));
   join_tape(0);
 
   print_compiler();
@@ -340,8 +345,8 @@ void Machine<sint, sgf2n>::run()
       queues[i]->schedule(-1);
     }
 
-  // sum actual usage
-  DataPositions pos(N.num_players());
+  // reset to sum actual usage
+  pos.reset();
 
 #ifdef DEBUG_THREADS
   cerr << "Waiting for all clients to finish" << endl;
