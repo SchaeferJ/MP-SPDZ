@@ -2331,6 +2331,30 @@ class sint(_secret, _int):
             assert share.size == 1
         writesharestofile(*shares)
 
+    @staticmethod   
+    def write_weights_to_file(shares):
+        """ Write shares to ``Persistence/Weights-P<playerno>.data``
+        (appending at the end).
+
+        :param: shares (list or iterable of sint)
+        """
+        for share in shares:
+            assert isinstance(share, sint)
+            assert share.size == 1
+        writeweightstofile(*shares)
+
+    @staticmethod   
+    def write_perf_to_file(shares):
+        """ Write shares to ``Persistence/Performance-P<playerno>.data``
+        (appending at the end).
+
+        :param: shares (list or iterable of sint)
+        """
+        for share in shares:
+            assert isinstance(share, sint)
+            assert share.size == 1
+        writeperftofile(*shares)
+
     @vectorized_classmethod
     def load_mem(cls, address, mem_type=None):
         """ Load from memory by public address. """
@@ -3919,6 +3943,25 @@ class _single(_number, _secret_structure):
         """
         cls.int_type.write_to_file([x.v for x in shares])
 
+
+    @classmethod
+    def write_weights_to_file(cls, shares):
+        """ Write shares of integer representation to
+        ``Persistence/Weights-P<playerno>.data`` (appending at the end).
+
+        :param: shares (list or iterable of sfix)
+        """
+        cls.int_type.write_weights_to_file([x.v for x in shares])
+
+    @classmethod
+    def write_perf_to_file(cls, shares):
+        """ Write shares of integer representation to
+        ``Persistence/Performance-P<playerno>.data`` (appending at the end).
+
+        :param: shares (list or iterable of sfix)
+        """
+        cls.int_type.write_perf_to_file([x.v for x in shares])
+
     def store_in_mem(self, address):
         """ Store in memory by public address. """
         self.v.store_in_mem(address)
@@ -5383,6 +5426,18 @@ class Array(_vectorizable):
         """
         self.value_type.write_to_file(list(self))
 
+    def write_weights_to_file(self):
+        """ Write shares of integer representation to
+        ``Persistence/Weights-P<playerno>.data`` (appending at the end).
+        """
+        self.value_type.write_weights_to_file(list(self))
+    
+    def write_perf_to_file(self):
+        """ Write shares of integer representation to
+        ``Persistence/Performance-P<playerno>.data`` (appending at the end).
+        """
+        self.value_type.write_perf_to_file(list(self))
+
     def __add__(self, other):
         """ Vector addition.
 
@@ -5702,6 +5757,22 @@ class SubMultiArray(_vectorizable):
         @library.for_range(len(self))
         def _(i):
             self[i].write_to_file()
+
+    def write_weights_to_file(self):
+        """ Write shares of integer representation to
+        ``Persistence/Weights-P<playerno>.data`` (appending at the end).
+        """
+        @library.for_range(len(self))
+        def _(i):
+            self[i].write_weights_to_file()
+
+    def write_perf_to_file(self):
+        """ Write shares of integer representation to
+        ``Persistence/Performance-P<playerno>.data`` (appending at the end).
+        """
+        @library.for_range(len(self))
+        def _(i):
+            self[i].write_perf_to_file()
 
     def read_from_file(self, start):
         """ Read content from ``Persistence/Transactions-P<playerno>.data``.

@@ -240,7 +240,9 @@ class Processor : public ArithmeticProcessor
   // Read and write secret numeric data to file (name hardcoded at present)
   void read_shares_from_file(int start_file_pos, int end_file_pos_register, const vector<int>& data_registers);
   void write_shares_to_file(const vector<int>& data_registers);
-  
+  void write_weights_to_file(const vector<int>& data_registers);
+  void write_perf_to_file(const vector<int>& data_registers);
+
   cint get_inverse2(unsigned m);
 
   // Print the processor state

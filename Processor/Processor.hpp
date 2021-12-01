@@ -406,6 +406,39 @@ void Processor<sint, sgf2n>::write_shares_to_file(const vector<int>& data_regist
   binary_file_io.write_to_file(filename, inpbuf);
 }
 
+// Append share data in data_registers to end of file. Expects Persistence directory to exist.
+template<class sint, class sgf2n>
+void Processor<sint, sgf2n>::write_weights_to_file(const vector<int>& data_registers) {
+  string weightname = binary_file_io.weightname(P.my_num());
+
+  unsigned int size = data_registers.size();
+
+  vector< sint > inpbuf (size);
+
+  for (unsigned int i = 0; i < size; i++)
+  {
+    inpbuf[i] = get_Sp_ref(data_registers[i]);
+  }
+
+  binary_file_io.write_to_file(weightname, inpbuf);
+}
+
+template<class sint, class sgf2n>
+void Processor<sint, sgf2n>::write_perf_to_file(const vector<int>& data_registers) {
+  string perfname = binary_file_io.perfname(P.my_num());
+
+  unsigned int size = data_registers.size();
+
+  vector< sint > inpbuf (size);
+
+  for (unsigned int i = 0; i < size; i++)
+  {
+    inpbuf[i] = get_Sp_ref(data_registers[i]);
+  }
+
+  binary_file_io.write_to_file(perfname, inpbuf);
+}
+
 template <class T>
 void SubProcessor<T>::POpen(const vector<int>& reg,const Player& P,int size)
 {
