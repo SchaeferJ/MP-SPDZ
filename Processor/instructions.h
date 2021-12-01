@@ -369,6 +369,7 @@
     X(WRITESOCKETSHARE, throw not_implemented(),) \
     X(WRITEFILESHARE, throw not_implemented(),) \
     X(READFILESHARE, throw not_implemented(),) \
+    X(READWEIGHTSHARE, throw not_implemented(),) \
     X(PUBINPUT, throw not_implemented(),) \
     X(RAWOUTPUT, throw not_implemented(),) \
     X(INTOUTPUT, throw not_implemented(),) \
