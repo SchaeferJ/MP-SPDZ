@@ -1803,6 +1803,22 @@ class readweightsfromfile(base.IOInstruction):
     def has_var_args(self):
         return True
 
+class readtempfromfile(base.IOInstruction):
+    """ Read weights from ``Persistence/Weights-P<playerno>.data``.
+
+    :param: number of arguments to follow / number of shares plus two (int)
+    :param: starting position in number of shares from beginning (regint)
+    :param: destination for final position, -1 for eof reached, or -2 for file not found (regint)
+    :param: destination for share (sint)
+    :param: (repeat from destination for share)...
+    """
+    __slots__ = []
+    code = base.opcodes['READTEMPSHARE']
+    arg_format = tools.chain(['ci', 'ciw'], itertools.repeat('sw'))
+
+    def has_var_args(self):
+        return True
+
 @base.gf2n
 @base.vectorize
 class raw_output(base.PublicFileIOInstruction):
