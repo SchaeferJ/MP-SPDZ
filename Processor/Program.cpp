@@ -26,6 +26,7 @@ void Program::compute_constants()
       writes_persistance |= p[i].opcode == WRITEFILESHARE;
       writes_weights |= p[i].opcode == WRITEWEIGHTSHARE;
       writes_perf |= p[i].opcode == WRITEPERFSHARE;
+      writes_temp |= p[i].opcode == WRITEPERFSHARE;
     }
 }
 

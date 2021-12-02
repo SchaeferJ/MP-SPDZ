@@ -23,7 +23,8 @@ class Binary_File_IO
   static string filename(int my_number);
   static string weightname(int my_number);
   static string perfname(int my_number);
-  
+  static string tempname(int my_number);
+
   /*
    * Append the buffer values as binary to the filename.
    * Throws file_error.   

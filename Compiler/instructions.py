@@ -1771,6 +1771,22 @@ class writeperftofile(base.IOInstruction):
     def has_var_args(self):
         return True
 
+class writetemptofile(base.IOInstruction):
+    """ Write shares to ``Persistence/Temp-P<playerno>.data``
+    (appending at the end).
+
+    :param: number of shares (int)
+    :param: source (sint)
+    :param: (repeat from source)...
+
+    """
+    __slots__ = []
+    code = base.opcodes['WRITETEMPSHARE']
+    arg_format = itertools.repeat('s')
+
+    def has_var_args(self):
+        return True
+
 class readsharesfromfile(base.IOInstruction):
     """ Read shares from ``Persistence/Transactions-P<playerno>.data``.
 

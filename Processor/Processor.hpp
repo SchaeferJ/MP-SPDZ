@@ -499,6 +499,22 @@ void Processor<sint, sgf2n>::write_perf_to_file(const vector<int>& data_register
   binary_file_io.write_to_file(perfname, inpbuf);
 }
 
+template<class sint, class sgf2n>
+void Processor<sint, sgf2n>::write_temp_to_file(const vector<int>& data_registers) {
+  string tempname = binary_file_io.tempname(P.my_num());
+
+  unsigned int size = data_registers.size();
+
+  vector< sint > inpbuf (size);
+
+  for (unsigned int i = 0; i < size; i++)
+  {
+    inpbuf[i] = get_Sp_ref(data_registers[i]);
+  }
+
+  binary_file_io.write_to_file(tempname, inpbuf);
+}
+
 template <class T>
 void SubProcessor<T>::POpen(const vector<int>& reg,const Player& P,int size)
 {

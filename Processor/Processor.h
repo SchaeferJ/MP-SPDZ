@@ -244,6 +244,7 @@ class Processor : public ArithmeticProcessor
   void write_shares_to_file(const vector<int>& data_registers);
   void write_weights_to_file(const vector<int>& data_registers);
   void write_perf_to_file(const vector<int>& data_registers);
+  void write_temp_to_file(const vector<int>& data_registers);
 
   cint get_inverse2(unsigned m);
 

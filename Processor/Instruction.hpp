@@ -274,6 +274,7 @@ void BaseInstruction::parse_operands(istream& s, int pos, int file_pos)
       case WRITEFILESHARE:
       case WRITEWEIGHTSHARE:
       case WRITEPERFSHARE:
+      case WRITETEMPSHARE:
       case OPEN:
       case GOPEN:
       case MULS:
@@ -1196,6 +1197,10 @@ inline void Instruction::execute(Processor<sint, sgf2n>& Proc) const
       case WRITEPERFSHARE:
         // Write shares to file system
         Proc.write_perf_to_file(start);
+        break;
+      case WRITETEMPSHARE:
+        // Write shares to file system
+        Proc.write_temp_to_file(start);
         break;
       case READFILESHARE:
         // Read shares from file system

@@ -27,6 +27,13 @@ inline string Binary_File_IO::perfname(int my_number)
   return dir + "/Performance-P" + to_string(my_number) + ".data";
 }
 
+inline string Binary_File_IO::tempname(int my_number)
+{
+  string dir = "Persistence";
+  mkdir_p(dir.c_str());
+  return dir + "/Temp-P" + to_string(my_number) + ".data";
+}
+
 template<class T> 
 void Binary_File_IO::write_to_file(const string filename, const vector< T >& buffer)
 {

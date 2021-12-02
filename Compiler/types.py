@@ -2383,6 +2383,18 @@ class sint(_secret, _int):
             assert share.size == 1
         writeperftofile(*shares)
 
+    @staticmethod   
+    def write_temp_to_file(shares):
+        """ Write shares to ``Persistence/Temp-P<playerno>.data``
+        (appending at the end).
+
+        :param: shares (list or iterable of sint)
+        """
+        for share in shares:
+            assert isinstance(share, sint)
+            assert share.size == 1
+        writetemptofile(*shares)
+
     @vectorized_classmethod
     def load_mem(cls, address, mem_type=None):
         """ Load from memory by public address. """
@@ -4020,6 +4032,15 @@ class _single(_number, _secret_structure):
         """
         cls.int_type.write_perf_to_file([x.v for x in shares])
 
+    @classmethod
+    def write_temp_to_file(cls, shares):
+        """ Write shares of integer representation to
+        ``Persistence/Temp-P<playerno>.data`` (appending at the end).
+
+        :param: shares (list or iterable of sfix)
+        """
+        cls.int_type.write_temp_to_file([x.v for x in shares])
+
     def store_in_mem(self, address):
         """ Store in memory by public address. """
         self.v.store_in_mem(address)
@@ -5522,6 +5543,12 @@ class Array(_vectorizable):
         """
         self.value_type.write_perf_to_file(list(self))
 
+    def write_temp_to_file(self):
+        """ Write shares of integer representation to
+        ``Persistence/Temp-P<playerno>.data`` (appending at the end).
+        """
+        self.value_type.write_temp_to_file(list(self))
+
     def __add__(self, other):
         """ Vector addition.
 
@@ -5857,6 +5884,14 @@ class SubMultiArray(_vectorizable):
         @library.for_range(len(self))
         def _(i):
             self[i].write_perf_to_file()
+
+    def write_temp_to_file(self):
+        """ Write shares of integer representation to
+        ``Persistence/Temp-P<playerno>.data`` (appending at the end).
+        """
+        @library.for_range(len(self))
+        def _(i):
+            self[i].write_temp_to_file()
 
     def read_from_file(self, start):
         """ Read content from ``Persistence/Transactions-P<playerno>.data``.
