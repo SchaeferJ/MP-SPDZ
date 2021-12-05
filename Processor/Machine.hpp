@@ -103,8 +103,8 @@ Machine<sint, sgf2n>::Machine(int my_number, Names& playerNames,
         ofstream(Binary_File_IO::weightname(my_number), ios::out);
       if (prog.writes_perf)
         ofstream(Binary_File_IO::perfname(my_number), ios::out);
-      if (prog.writes_temp)
-        ofstream(Binary_File_IO::tempname(my_number), ios::out);
+      //if (prog.writes_temp)
+        //ofstream(Binary_File_IO::tempname(my_number), ios::out);
     }
 
 #ifdef VERBOSE
