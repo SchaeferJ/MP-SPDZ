@@ -1,3 +1,4 @@
+MY_CFLAGS = -DINSECURE
 ROOT = .
 
 OPTIM= -O3
