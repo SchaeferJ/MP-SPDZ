@@ -195,8 +195,8 @@ int ServerSocket::get_connection_socket(const string& id)
 
   while (clients.find(id) == clients.end())
   {
-      if (data_signal.wait(60) == ETIMEDOUT)
-          throw runtime_error("No client after one minute");
+      if (data_signal.wait(600) == ETIMEDOUT)
+          throw runtime_error("No client after ten minutes");
   }
 
   int client_socket = clients[id];
